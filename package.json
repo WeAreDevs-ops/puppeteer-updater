@@ -1,7 +1,7 @@
 {
   "name": "roblox-auto-updater",
   "version": "1.0.0",
-  "description": "Automated Birthdate and Email Updater with Enhanced Debug Logging",
+  "description": "Automated Birthdate and Email Updater",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
