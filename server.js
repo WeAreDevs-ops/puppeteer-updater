@@ -35,35 +35,52 @@ const DEBUG = {
 // ==========================================
 // HELPER: Launch browser & setup page
 // ==========================================
+// --- BROWSER ENGINE ---
 async function createRobloxSession(cookie) {
-    DEBUG.log("SESSION", "Launching browser...");
+    log("SESSION", "Launching browser...");
     const browser = await puppeteer.launch({
         headless: "new",
-        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--no-zygote', '--single-process']
+        args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-gpu',
+            '--no-zygote',
+            '--single-process'
+        ]
     });
-    const page = await browser.newPage();
-    DEBUG.success("SESSION", "Browser launched successfully");
     
-    await page.setRequestInterception(true);
-    page.on('request', (req) => {
-        if (['image', 'stylesheet', 'font', 'media'].includes(req.resourceType())) req.abort();
-        else req.continue();
-    });
+    const page = await browser.newPage();
+    
+    // Pipe browser console logs to Node.js terminal
+    page.on('console', msg => log("UI", msg.text()));
 
-    DEBUG.log("SESSION", "Setting cookie...");
+    log("SESSION", "Setting cookie...");
     await page.setCookie({
         name: ".ROBLOSECURITY",
         value: cookie.replace('.ROBLOSECURITY=', ''),
-        domain: ".roblox.com", path: "/", httpOnly: true, secure: true
+        domain: ".roblox.com",
+        path: "/",
+        httpOnly: true,
+        secure: true
     });
-    DEBUG.success("SESSION", "Cookie set successfully");
 
-    DEBUG.log("SESSION", "Navigating to account info page...");
-    await page.goto('https://www.roblox.com/my/account#!/info', { waitUntil: 'networkidle2', timeout: 60000 });
-    DEBUG.success("SESSION", "Page loaded successfully");
+    log("SESSION", "Navigating to account info page...");
+    await page.goto('https://www.roblox.com/my/account#!/info', { waitUntil: 'networkidle2' });
     
+    // 🛑 THE CRITICAL URL CHECK 🛑
+    const currentUrl = page.url().toLowerCase();
+    log("SESSION", `Current URL after navigation: ${currentUrl}`);
+    
+    if (currentUrl.includes('login') || !currentUrl.includes('my/account')) {
+        await browser.close();
+        throw new Error("INVALID_COOKIE: Roblox rejected the cookie and redirected to the login page.");
+    }
+
+    log("SESSION", "Page loaded successfully");
     return { browser, page };
 }
+
 
 // ==========================================
 // HELPER: Find and click button by exact text
