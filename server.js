@@ -36,8 +36,9 @@ const DEBUG = {
 // HELPER: Launch browser & setup page
 // ==========================================
 // --- BROWSER ENGINE ---
+// --- BROWSER ENGINE ---
 async function createRobloxSession(cookie) {
-    log("SESSION", "Launching browser...");
+    console.log("🔍 [SESSION] Launching browser...");
     const browser = await puppeteer.launch({
         headless: "new",
         args: [
@@ -53,9 +54,9 @@ async function createRobloxSession(cookie) {
     const page = await browser.newPage();
     
     // Pipe browser console logs to Node.js terminal
-    page.on('console', msg => log("UI", msg.text()));
+    page.on('console', msg => console.log(`🖥️ [UI]: ${msg.text()}`));
 
-    log("SESSION", "Setting cookie...");
+    console.log("🔍 [SESSION] Setting cookie...");
     await page.setCookie({
         name: ".ROBLOSECURITY",
         value: cookie.replace('.ROBLOSECURITY=', ''),
@@ -65,22 +66,21 @@ async function createRobloxSession(cookie) {
         secure: true
     });
 
-    log("SESSION", "Navigating to account info page...");
+    console.log("🔍 [SESSION] Navigating to account info page...");
     await page.goto('https://www.roblox.com/my/account#!/info', { waitUntil: 'networkidle2' });
     
     // 🛑 THE CRITICAL URL CHECK 🛑
     const currentUrl = page.url().toLowerCase();
-    log("SESSION", `Current URL after navigation: ${currentUrl}`);
+    console.log(`🔍 [SESSION] Current URL after navigation: ${currentUrl}`);
     
     if (currentUrl.includes('login') || !currentUrl.includes('my/account')) {
         await browser.close();
         throw new Error("INVALID_COOKIE: Roblox rejected the cookie and redirected to the login page.");
     }
 
-    log("SESSION", "Page loaded successfully");
+    console.log("✅ [SESSION] Page loaded successfully");
     return { browser, page };
 }
-
 
 // ==========================================
 // HELPER: Find and click button by exact text
