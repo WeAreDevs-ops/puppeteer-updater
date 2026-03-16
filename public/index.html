@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Account Automation</title>
+    <title>Account Automation API</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: -apple-system, sans-serif; background: #0f0f13; color: #e0e0e0; display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; }
@@ -12,7 +12,10 @@
         label { display: block; font-size: 13px; color: #999; margin-bottom: 6px; margin-top: 16px; }
         input { width: 100%; background: #12121a; border: 1px solid #2a2a3a; border-radius: 8px; padding: 12px; color: #fff; font-size: 14px; outline: none; }
         input:focus { border-color: #0066ff; }
-        .btn { width: 100%; margin-top: 24px; padding: 14px; background: linear-gradient(135deg, #0066ff, #00b4ff); border: none; border-radius: 8px; color: #fff; font-size: 15px; font-weight: 600; cursor: pointer; transition: 0.2s; }
+        .btn-group { display: flex; gap: 10px; margin-top: 24px; }
+        .btn { flex: 1; padding: 14px; border: none; border-radius: 8px; color: #fff; font-size: 14px; font-weight: 600; cursor: pointer; transition: 0.2s; }
+        .btn-bday { background: linear-gradient(135deg, #8b5cf6, #c084fc); }
+        .btn-email { background: linear-gradient(135deg, #0066ff, #00b4ff); }
         .btn:hover { opacity: 0.9; }
         .btn:disabled { opacity: 0.5; cursor: not-allowed; }
         .result { margin-top: 20px; padding: 14px; border-radius: 8px; font-size: 14px; display: none; text-align: center; }
@@ -22,7 +25,7 @@
 </head>
 <body>
     <div class="card">
-        <h1>⚙️ Auto Setup Tool</h1>
+        <h1>⚙️ Account Setup API</h1>
         
         <label>Roblox Cookie</label>
         <input type="password" id="cookie" placeholder="Paste .ROBLOSECURITY..." />
@@ -30,31 +33,38 @@
         <label>Account Password</label>
         <input type="password" id="password" placeholder="Current password..." />
 
-        <label>New Email</label>
+        <label>New Email (Only for Email Service)</label>
         <input type="email" id="email" placeholder="New email to attach..." />
 
-        <button class="btn" id="submitBtn" onclick="startUpdate()">Run Automation</button>
+        <div class="btn-group">
+            <button class="btn btn-bday" id="bdayBtn" onclick="runService('/api/update-birthdate', 'bdayBtn')">Set Birthdate</button>
+            <button class="btn btn-email" id="emailBtn" onclick="runService('/api/update-email', 'emailBtn')">Set Email</button>
+        </div>
 
         <div class="result" id="result"></div>
     </div>
 
     <script>
-        async function startUpdate() {
+        async function runService(endpoint, btnId) {
             const cookie = document.getElementById('cookie').value.trim();
             const password = document.getElementById('password').value.trim();
             const email = document.getElementById('email').value.trim();
 
-            if (!cookie || !password || !email) return alert("Fill out all fields.");
+            if (!cookie || !password) return alert("Cookie and Password are required.");
+            if (endpoint === '/api/update-email' && !email) return alert("Email is required for the Email service.");
 
-            const btn = document.getElementById('submitBtn');
+            const activeBtn = document.getElementById(btnId);
+            const otherBtn = document.getElementById(btnId === 'bdayBtn' ? 'emailBtn' : 'bdayBtn');
             const resultEl = document.getElementById('result');
             
-            btn.disabled = true;
-            btn.textContent = "⚙️ Automating... (Takes ~15s)";
+            activeBtn.disabled = true;
+            otherBtn.disabled = true;
+            const originalText = activeBtn.textContent;
+            activeBtn.textContent = "⏳ Running...";
             resultEl.style.display = 'none';
 
             try {
-                const resp = await fetch('/api/update-account', {
+                const resp = await fetch(endpoint, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ cookie, password, email })
@@ -63,7 +73,7 @@
                 const data = await resp.json();
                 
                 resultEl.className = 'result ' + (data.success ? 'success' : 'error');
-                resultEl.textContent = data.success ? data.message : "❌ Error: " + data.error;
+                resultEl.textContent = data.success ? "✅ " + data.message : "❌ Error: " + data.error;
                 resultEl.style.display = 'block';
 
             } catch (err) {
@@ -71,11 +81,11 @@
                 resultEl.textContent = "❌ Server failed to respond.";
                 resultEl.style.display = 'block';
             } finally {
-                btn.disabled = false;
-                btn.textContent = "Run Automation";
+                activeBtn.disabled = false;
+                otherBtn.disabled = false;
+                activeBtn.textContent = originalText;
             }
         }
     </script>
 </body>
 </html>
-
