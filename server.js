@@ -135,7 +135,7 @@ async function waitForElement(page, selector, timeout = 30000, visible = true) {
 }
 
 // ==========================================
-// HELPER: Handle 2-Step Verification
+// HELPER: Handle 2-Step Verification (WITH PLAN B)
 // ==========================================
 async function handleTwoStepVerification(page, password) {
     DEBUG.log("2FA", "Starting 2-Step Verification handling...");
@@ -153,11 +153,22 @@ async function handleTwoStepVerification(page, password) {
         await passwordInput.type(password);
         DEBUG.success("2FA", "Password entered");
         
-        // Click Verify button
-        const verifyClicked = await findAndClickButton(page, "Verify", true, 5000);
+        // PLAN A: Wider net for the submit button (exactMatch = false)
+        DEBUG.log("2FA", "Looking for a submit button...");
+        const verifyClicked = await findAndClickButton(page, "Verify", false, 3000) || 
+                              await findAndClickButton(page, "Continue", false, 1000) || 
+                              await findAndClickButton(page, "Unlock", false, 1000);
+                              
         if (verifyClicked) {
-            DEBUG.success("2FA", "Verify button clicked");
+            DEBUG.success("2FA", "Submit button clicked");
             return { success: true, method: "direct_password" };
+        } else {
+            // PLAN B: The Enter Key Smash
+            DEBUG.warn("2FA", "Submit button not found! Executing Plan B: Enter key...");
+            await passwordInput.press('Enter');
+            DEBUG.success("2FA", "Pressed Enter key");
+            await new Promise(r => setTimeout(r, 5000)); // Wait for Roblox to process
+            return { success: true, method: "direct_password_enter_key" };
         }
     }
     
@@ -209,16 +220,25 @@ async function handleTwoStepVerification(page, password) {
     await passInput.type(password);
     DEBUG.success("2FA", "Password entered");
     
-    // Click Verify
-    const verifyResult = await findAndClickButton(page, "Verify", true, 5000);
+    // PLAN A: Wider net for the alternative method verify button
+    DEBUG.log("2FA", "Looking for a submit button...");
+    const verifyResult = await findAndClickButton(page, "Verify", false, 3000) || 
+                         await findAndClickButton(page, "Continue", false, 1000) || 
+                         await findAndClickButton(page, "Unlock", false, 1000);
+                         
     if (verifyResult) {
-        DEBUG.success("2FA", "Verify button clicked successfully");
+        DEBUG.success("2FA", "Submit button clicked successfully");
         return { success: true, method: "alternative_password" };
+    } else {
+        // PLAN B: The Enter Key Smash (Alternative Route)
+        DEBUG.warn("2FA", "Submit button not found! Executing Plan B: Enter key...");
+        await passInput.press('Enter');
+        DEBUG.success("2FA", "Pressed Enter key");
+        await new Promise(r => setTimeout(r, 5000)); // Wait for Roblox to process
+        return { success: true, method: "alternative_password_enter_key" };
     }
-    
-    return { success: false, error: "Failed to click Verify button" };
 }
-
+    
 // ==========================================
 // SERVICE 1: BIRTHDATE CHANGER
 // ==========================================
