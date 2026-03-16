@@ -472,15 +472,20 @@ app.post("/api/update-email", async (req, res) => {
         }
         DEBUG.success("EMAIL", "Email entered successfully");
         
-        // Step 3: Click Change Email button
-        DEBUG.log("EMAIL", "Step 3: Clicking Change Email button...");
+        
+        // Step 3: Click Change/Add Email button
+        DEBUG.log("EMAIL", "Step 3: Clicking Submit Email button...");
         await new Promise(r => setTimeout(r, 1500));
         
-        const changeEmailClicked = await findAndClickButton(page, "Change Email", true, 10000);
+        // Widen the net to catch "Change Email", "Add Email", or "Add"
+        const changeEmailClicked = await findAndClickButton(page, "Change Email", false, 3000) || 
+                                   await findAndClickButton(page, "Add Email", false, 3000) ||
+                                   await findAndClickButton(page, "Add", true, 3000);
+
         if (!changeEmailClicked) {
-            throw new Error("Could not click Change Email button");
+            throw new Error("Could not click Change/Add Email button");
         }
-        DEBUG.success("EMAIL", "Change Email button clicked");
+        DEBUG.success("EMAIL", "Submit Email button clicked");
         
         // Step 4: Handle 2-Step Verification
         DEBUG.log("EMAIL", "Step 4: Handling 2-Step Verification...");
