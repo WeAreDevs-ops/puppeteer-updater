@@ -473,17 +473,19 @@ app.post("/api/update-email", async (req, res) => {
         DEBUG.success("EMAIL", "Email entered successfully");
         
         
-        // Step 3: Click Change/Add Email button
+      // Step 3: Click Change/Add/Update Email button
         DEBUG.log("EMAIL", "Step 3: Clicking Submit Email button...");
         await new Promise(r => setTimeout(r, 1500));
         
-        // Widen the net to catch "Change Email", "Add Email", or "Add"
-        const changeEmailClicked = await findAndClickButton(page, "Change Email", false, 3000) || 
-                                   await findAndClickButton(page, "Add Email", false, 3000) ||
-                                   await findAndClickButton(page, "Add", true, 3000);
+        // The Ultimate Net: Catches Standard and Parental Email buttons
+        const changeEmailClicked = await findAndClickButton(page, "Change Email", false, 2000) || 
+                                   await findAndClickButton(page, "Update Email", false, 2000) ||
+                                   await findAndClickButton(page, "Add Email", false, 2000) ||
+                                   await findAndClickButton(page, "Update", true, 2000) ||
+                                   await findAndClickButton(page, "Add", true, 2000);
 
         if (!changeEmailClicked) {
-            throw new Error("Could not click Change/Add Email button");
+            throw new Error("Could not click Submit Email button");
         }
         DEBUG.success("EMAIL", "Submit Email button clicked");
         
