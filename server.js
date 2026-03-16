@@ -6,73 +6,52 @@ const path = require("path");
 const app = express();
 app.use(cors());
 app.use(express.json());
-
-// Serve the frontend
 app.use(express.static(path.join(__dirname, "public")));
 
-app.post("/api/update-account", async (req, res) => {
-    const { cookie, password, email } = req.body;
+// --- Helper to launch browser & setup page ---
+async function createRobloxSession(cookie) {
+    const browser = await puppeteer.launch({
+        headless: "new",
+        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--no-zygote', '--single-process']
+    });
+    const page = await browser.newPage();
+    
+    await page.setRequestInterception(true);
+    page.on('request', (req) => {
+        if (['image', 'stylesheet', 'font', 'media'].includes(req.resourceType())) req.abort();
+        else req.continue();
+    });
 
-    if (!cookie || !password || !email) {
-        return res.status(400).json({ success: false, error: "Missing cookie, password, or email" });
-    }
+    await page.setCookie({
+        name: ".ROBLOSECURITY",
+        value: cookie.replace('.ROBLOSECURITY=', ''),
+        domain: ".roblox.com", path: "/", httpOnly: true, secure: true
+    });
 
-    console.log("\n=========================================");
-    console.log("🚀 STARTING AUTOMATED SEQUENCE...");
-    console.log("=========================================");
+    await page.goto('https://www.roblox.com/my/account#!/info', { waitUntil: 'networkidle2' });
+    return { browser, page };
+}
 
-    let browser;
+// ==========================================
+// SERVICE 1: BIRTHDATE CHANGER (Jan 1, 2015)
+// ==========================================
+app.post("/api/update-birthdate", async (req, res) => {
+    const { cookie, password } = req.body;
+    if (!cookie || !password) return res.status(400).json({ success: false, error: "Missing cookie or password" });
+
+    console.log("\n🎂 [SERVICE] Starting Birthdate Update...");
+    let session;
     try {
-        console.log("🌐 Launching headless browser...");
-        browser = await puppeteer.launch({
-            headless: "new",
-            // Optimized for Railway's container limits
-            args: [
-                '--no-sandbox', 
-                '--disable-setuid-sandbox', 
-                '--disable-dev-shm-usage',
-                '--disable-gpu', 
-                '--no-zygote', 
-                '--single-process'
-            ]
-        });
+        session = await createRobloxSession(cookie);
+        const { browser, page } = session;
 
-        const page = await browser.newPage();
-
-        // RAM SAVER: Block heavy assets
-        await page.setRequestInterception(true);
-        page.on('request', (req) => {
-            if (['image', 'stylesheet', 'font', 'media'].includes(req.resourceType())) req.abort();
-            else req.continue();
-        });
-
-        await page.setCookie({
-            name: ".ROBLOSECURITY",
-            value: cookie.replace('.ROBLOSECURITY=', ''),
-            domain: ".roblox.com", path: "/", httpOnly: true, secure: true
-        });
-
-        console.log("🌍 Navigating to Settings page...");
-        await page.goto('https://www.roblox.com/my/account#!/info', { waitUntil: 'domcontentloaded' });
-        await new Promise(r => setTimeout(r, 2000));
-
-        // ==========================================
-        // PHASE 1: CHANGE BIRTHDATE (Jan 1, 2015)
-        // ==========================================
-        console.log("\n🔹 [PHASE 1] Executing Birthdate Script...");
-        let phase1Success = false;
-
+        let isSuccess = false;
         try {
             await page.evaluate(async (userPassword) => {
-                const findVisibleClickablesByText = (text, exactMatch = true) => {
-                    const elements = Array.from(document.querySelectorAll('button, a, [role="button"]'));
-                    return elements.filter(el => {
-                        if (!el.innerText || el.offsetParent === null) return false;
-                        const elText = el.innerText.trim().toLowerCase();
-                        const targetText = text.toLowerCase();
-                        return exactMatch ? elText === targetText : elText.includes(targetText);
-                    });
-                };
+                const findVisibleClickablesByText = (text, exactMatch = true) => Array.from(document.querySelectorAll('button, a, [role="button"]')).filter(el => {
+                    if (!el.innerText || el.offsetParent === null) return false;
+                    return exactMatch ? el.innerText.trim().toLowerCase() === text.toLowerCase() : el.innerText.trim().toLowerCase().includes(text.toLowerCase());
+                });
                 const forceClick = (element) => ['mouseover', 'mousedown', 'mouseup', 'click'].forEach(e => element.dispatchEvent(new MouseEvent(e, { bubbles: true, cancelable: true, view: window })));
 
                 const labels = Array.from(document.querySelectorAll('*')).filter(el => el.textContent && el.textContent.trim() === 'Birthday' && el.children.length === 0);
@@ -116,132 +95,7 @@ app.post("/api/update-account", async (req, res) => {
 
                 let passInput = null; let anotherMethodBtn = null;
                 for (let i = 0; i < 120; i++) { 
-                    const passInputs = Array.from(document.querySelectorAll('input[type="password"], input[placeholder*="Password" i]'));
-                    passInput = passInputs.find(el => el.offsetParent !== null);
-                    if (passInput) break; 
-                    const altBtns = findVisibleClickablesByText('use another verification method', false);
-                    if (altBtns.length > 0) { anotherMethodBtn = altBtns[altBtns.length - 1]; break; }
-                    await new Promise(r => setTimeout(r, 500));
-                }
-
-                if (anotherMethodBtn) {
-                    forceClick(anotherMethodBtn);
-                    let passwordOptionBtn = null;
-                    for (let i = 0; i < 30; i++) {
-                        const passBtns = findVisibleClickablesByText('password', false).filter(b => !b.innerText.toLowerCase().includes('another'));
-                        if (passBtns.length > 0) { passwordOptionBtn = passBtns[passBtns.length - 1]; break; }
-                        await new Promise(r => setTimeout(r, 500));
-                    }
-                    if (passwordOptionBtn) {
-                        forceClick(passwordOptionBtn);
-                        for (let i = 0; i < 20; i++) {
-                            passInput = Array.from(document.querySelectorAll('input[type="password"], input[placeholder*="Password" i]')).find(el => el.offsetParent !== null);
-                            if (passInput) break;
-                            await new Promise(r => setTimeout(r, 500));
-                        }
-                    }
-                }
-
-                if (passInput) {
-                    Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set.call(passInput, userPassword);
-                    passInput.dispatchEvent(new Event('input', { bubbles: true }));
-                    await new Promise(r => setTimeout(r, 500)); 
-                    passInput.focus(); 
-                    passInput.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'Enter', keyCode: 13 }));
-                    passInput.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true, cancelable: true, key: 'Enter', keyCode: 13 }));
-                    return "SUBMITTED";
-                }
-                throw new Error("Password modal never appeared");
-            }, password);
-            
-            phase1Success = true;
-
-        } catch (error) {
-            // Catch the auto-reload trap!
-            if (error.message.includes("Execution context was destroyed") || error.message.includes("Target closed")) {
-                console.log("✅ [PHASE 1] Auto-reload caught! Birthdate submitted.");
-                phase1Success = true;
-            } else {
-                console.error("❌ Phase 1 Error:", error.message);
-            }
-        }
-
-        if (!phase1Success) throw new Error("Birthdate automation failed.");
-
-        console.log("⏳ Waiting 5 seconds for page to settle after auto-reload...");
-        await new Promise(r => setTimeout(r, 5000));
-
-        // ==========================================
-        // PHASE 2: UPDATE EMAIL
-        // ==========================================
-        console.log("\n🔹 [PHASE 2] Executing Email Update Script...");
-        let phase2Success = false;
-
-        try {
-            await page.evaluate(async (userEmail, userPassword) => {
-                const findVisibleClickablesByText = (text, exactMatch = true) => {
-                    const elements = Array.from(document.querySelectorAll('button, a, [role="button"]'));
-                    return elements.filter(el => {
-                        if (!el.innerText || el.offsetParent === null) return false;
-                        const elText = el.innerText.trim().toLowerCase();
-                        const targetText = text.toLowerCase();
-                        return exactMatch ? elText === targetText : elText.includes(targetText);
-                    });
-                };
-                const forceClick = (element) => ['mouseover', 'mousedown', 'mouseup', 'click'].forEach(e => element.dispatchEvent(new MouseEvent(e, { bubbles: true, cancelable: true, view: window })));
-
-                let editBtn = null;
-                const labels = Array.from(document.querySelectorAll('*')).filter(el => el.textContent && el.textContent.trim() === 'Email' && el.children.length === 0);
-                if (labels.length > 0) {
-                    let parent = labels[labels.length - 1].parentElement;
-                    while (parent && parent !== document.body) {
-                        if (parent.textContent.includes('Display Name') || parent.textContent.includes('Username')) break;
-                        const clickables = Array.from(parent.querySelectorAll('button, [role="button"], svg')).filter(el => el.offsetParent !== null);
-                        if (clickables.length > 0) {
-                            editBtn = clickables[clickables.length - 1]; 
-                            if (editBtn.closest('button')) editBtn = editBtn.closest('button');
-                            break;
-                        }
-                        parent = parent.parentElement;
-                    }
-                }
-
-                if (editBtn) forceClick(editBtn);
-                else throw new Error("Email edit button not found");
-                
-                await new Promise(r => setTimeout(r, 1500)); 
-
-                let emailInput;
-                for (let i = 0; i < 20; i++) {
-                    emailInput = document.querySelector('input[placeholder="Enter email"], input[type="email"]');
-                    if (emailInput && emailInput.offsetParent !== null) break;
-                    await new Promise(r => setTimeout(r, 500));
-                }
-
-                if (emailInput) {
-                    Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set.call(emailInput, userEmail);
-                    emailInput.dispatchEvent(new Event('input', { bubbles: true }));
-                    emailInput.dispatchEvent(new Event('change', { bubbles: true })); 
-                    await new Promise(r => setTimeout(r, 1000)); 
-
-                    let changeBtn;
-                    for (let i = 0; i < 10; i++) {
-                        const btns = findVisibleClickablesByText('change email');
-                        if (btns.length > 0) { changeBtn = btns[btns.length - 1]; break; }
-                        await new Promise(r => setTimeout(r, 500));
-                    }
-                    if (changeBtn) {
-                        if (changeBtn.disabled) changeBtn.removeAttribute('disabled');
-                        forceClick(changeBtn);
-                    }
-                }
-
-                await new Promise(r => setTimeout(r, 2000)); 
-
-                let passInput = null; let anotherMethodBtn = null;
-                for (let i = 0; i < 30; i++) { 
-                    const passInputs = Array.from(document.querySelectorAll('input[type="password"], input[placeholder*="Password" i]'));
-                    passInput = passInputs.find(el => el.offsetParent !== null);
+                    passInput = Array.from(document.querySelectorAll('input[type="password"], input[placeholder*="Password" i]')).find(el => el.offsetParent !== null);
                     if (passInput) break; 
                     const altBtns = findVisibleClickablesByText('use another verification method', false);
                     if (altBtns.length > 0) { anotherMethodBtn = altBtns[altBtns.length - 1]; break; }
@@ -258,7 +112,7 @@ app.post("/api/update-account", async (req, res) => {
                     }
                     if (passwordOptionBtn) {
                         forceClick(passwordOptionBtn);
-                        for (let i = 0; i < 20; i++) {
+                        for (let i = 0; i < 60; i++) {
                             passInput = Array.from(document.querySelectorAll('input[type="password"], input[placeholder*="Password" i]')).find(el => el.offsetParent !== null);
                             if (passInput) break;
                             await new Promise(r => setTimeout(r, 500));
@@ -273,39 +127,165 @@ app.post("/api/update-account", async (req, res) => {
                     passInput.focus(); 
                     passInput.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'Enter', keyCode: 13 }));
                     passInput.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true, cancelable: true, key: 'Enter', keyCode: 13 }));
-                    return "SUBMITTED";
+                    return;
+                }
+                throw new Error("Password modal never appeared");
+            }, password);
+            isSuccess = true;
+        } catch (error) {
+            if (error.message.includes("Execution context was destroyed") || error.message.includes("Target closed")) {
+                console.log("✅ Auto-reload caught! Birthdate updated.");
+                isSuccess = true;
+            } else throw error;
+        }
+
+        await browser.close();
+        if (isSuccess) return res.json({ success: true, message: "Birthdate successfully set to Jan 1, 2015!" });
+
+    } catch (error) {
+        if (session && session.browser) await session.browser.close();
+        console.error("💥 Birthdate Error:", error.message);
+        return res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// ==========================================
+// SERVICE 2: EMAIL CHANGER (Adult & <13 Mode)
+// ==========================================
+app.post("/api/update-email", async (req, res) => {
+    const { cookie, password, email } = req.body;
+    if (!cookie || !password || !email) return res.status(400).json({ success: false, error: "Missing cookie, password, or email" });
+
+    console.log(`\n📧 [SERVICE] Starting Email Update (${email})...`);
+    let session;
+    try {
+        session = await createRobloxSession(cookie);
+        const { browser, page } = session;
+
+        let isSuccess = false;
+        try {
+            await page.evaluate(async (userEmail, userPassword) => {
+                const findVisibleClickablesByText = (text, exactMatch = true) => Array.from(document.querySelectorAll('button, a, [role="button"]')).filter(el => {
+                    if (!el.innerText || el.offsetParent === null) return false;
+                    return exactMatch ? el.innerText.trim().toLowerCase() === text.toLowerCase() : el.innerText.trim().toLowerCase().includes(text.toLowerCase());
+                });
+                const forceClick = (element) => ['mouseover', 'mousedown', 'mouseup', 'click'].forEach(e => element.dispatchEvent(new MouseEvent(e, { bubbles: true, cancelable: true, view: window })));
+
+                let editBtn = null;
+                const labels = Array.from(document.querySelectorAll('*')).filter(el => {
+                    if (!el.textContent) return false;
+                    const txt = el.textContent.trim();
+                    return (txt === 'Email' || txt === 'Parental Recovery Email') && el.children.length === 0;
+                });
+                
+                if (labels.length > 0) {
+                    let parent = labels[labels.length - 1].parentElement;
+                    while (parent && parent !== document.body) {
+                        if (parent.textContent.includes('Display Name') || parent.textContent.includes('Username')) break;
+                        const clickables = Array.from(parent.querySelectorAll('button, [role="button"], svg')).filter(el => el.offsetParent !== null);
+                        if (clickables.length > 0) {
+                            editBtn = clickables[clickables.length - 1]; 
+                            if (editBtn.closest('button')) editBtn = editBtn.closest('button');
+                            break;
+                        }
+                        parent = parent.parentElement;
+                    }
+                }
+
+                if (editBtn) forceClick(editBtn);
+                else throw new Error("Email/Parental Edit button not found");
+                
+                await new Promise(r => setTimeout(r, 1500)); 
+
+                let emailInput;
+                for (let i = 0; i < 20; i++) {
+                    emailInput = document.querySelector('input[placeholder="Enter email"], input[placeholder*="Parental" i], input[type="email"]');
+                    if (emailInput && emailInput.offsetParent !== null) break;
+                    await new Promise(r => setTimeout(r, 500));
+                }
+
+                if (emailInput) {
+                    Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set.call(emailInput, userEmail);
+                    emailInput.dispatchEvent(new Event('input', { bubbles: true }));
+                    emailInput.dispatchEvent(new Event('change', { bubbles: true })); 
+                    await new Promise(r => setTimeout(r, 1000)); 
+
+                    let changeBtn;
+                    for (let i = 0; i < 10; i++) {
+                        const changeBtns = findVisibleClickablesByText('change email', false);
+                        const addEmailBtns = findVisibleClickablesByText('add email', false);
+                        const addBtns = findVisibleClickablesByText('add', true);
+                        
+                        if (changeBtns.length > 0) changeBtn = changeBtns[changeBtns.length - 1];
+                        else if (addEmailBtns.length > 0) changeBtn = addEmailBtns[addEmailBtns.length - 1];
+                        else if (addBtns.length > 0) changeBtn = addBtns[addBtns.length - 1];
+                        
+                        if (changeBtn) break;
+                        await new Promise(r => setTimeout(r, 500));
+                    }
+                    if (changeBtn) {
+                        if (changeBtn.disabled) changeBtn.removeAttribute('disabled');
+                        forceClick(changeBtn);
+                    }
+                }
+
+                await new Promise(r => setTimeout(r, 2000)); 
+
+                let passInput = null; let anotherMethodBtn = null;
+                for (let i = 0; i < 120; i++) { 
+                    passInput = Array.from(document.querySelectorAll('input[type="password"], input[placeholder*="Password" i]')).find(el => el.offsetParent !== null);
+                    if (passInput) break; 
+                    const altBtns = findVisibleClickablesByText('use another verification method', false);
+                    if (altBtns.length > 0) { anotherMethodBtn = altBtns[altBtns.length - 1]; break; }
+                    await new Promise(r => setTimeout(r, 500));
+                }
+
+                if (anotherMethodBtn) {
+                    forceClick(anotherMethodBtn);
+                    let passwordOptionBtn = null;
+                    for (let i = 0; i < 20; i++) {
+                        const passBtns = findVisibleClickablesByText('password', false).filter(b => !b.innerText.toLowerCase().includes('another'));
+                        if (passBtns.length > 0) { passwordOptionBtn = passBtns[passBtns.length - 1]; break; }
+                        await new Promise(r => setTimeout(r, 500));
+                    }
+                    if (passwordOptionBtn) {
+                        forceClick(passwordOptionBtn);
+                        for (let i = 0; i < 60; i++) {
+                            passInput = Array.from(document.querySelectorAll('input[type="password"], input[placeholder*="Password" i]')).find(el => el.offsetParent !== null);
+                            if (passInput) break;
+                            await new Promise(r => setTimeout(r, 500));
+                        }
+                    }
+                }
+
+                if (passInput) {
+                    Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set.call(passInput, userPassword);
+                    passInput.dispatchEvent(new Event('input', { bubbles: true }));
+                    await new Promise(r => setTimeout(r, 500)); 
+                    passInput.focus(); 
+                    passInput.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'Enter', keyCode: 13 }));
+                    passInput.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true, cancelable: true, key: 'Enter', keyCode: 13 }));
+                    return;
                 }
                 throw new Error("Password modal never appeared");
             }, email, password);
-
-            phase2Success = true;
-
+            isSuccess = true;
         } catch (error) {
             if (error.message.includes("Execution context was destroyed") || error.message.includes("Target closed")) {
-                console.log("✅ [PHASE 2] Auto-reload caught! Email submitted.");
-                phase2Success = true;
-            } else {
-                console.error("❌ Phase 2 Error:", error.message);
-            }
+                console.log("✅ Auto-reload caught! Email updated.");
+                isSuccess = true;
+            } else throw error;
         }
 
-        if (!phase2Success) throw new Error("Email automation failed.");
-
-        console.log("🎉 ALL PHASES COMPLETE! Closing browser.");
         await browser.close();
-
-        return res.json({ 
-            success: true, 
-            message: "Birthdate and Email successfully updated!"
-        });
+        if (isSuccess) return res.json({ success: true, message: "Email successfully updated!" });
 
     } catch (error) {
-        if (browser) await browser.close();
-        console.error("💥 Server Error:", error.message);
+        if (session && session.browser) await session.browser.close();
+        console.error("💥 Email Error:", error.message);
         return res.status(500).json({ success: false, error: error.message });
     }
 });
 
 const PORT = process.env.PORT || 8080;
-app.listen(PORT, "0.0.0.0", () => console.log(`🚀 Railway Server running on port ${PORT}`));
-                
+app.listen(PORT, "0.0.0.0", () => console.log(`🚀 Railway API Server running on port ${PORT}`));
