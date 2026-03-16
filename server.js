@@ -115,7 +115,7 @@ app.post("/api/update-account", async (req, res) => {
                 }
 
                 let passInput = null; let anotherMethodBtn = null;
-                for (let i = 0; i < 30; i++) { 
+                for (let i = 0; i < 120; i++) { 
                     const passInputs = Array.from(document.querySelectorAll('input[type="password"], input[placeholder*="Password" i]'));
                     passInput = passInputs.find(el => el.offsetParent !== null);
                     if (passInput) break; 
@@ -127,7 +127,7 @@ app.post("/api/update-account", async (req, res) => {
                 if (anotherMethodBtn) {
                     forceClick(anotherMethodBtn);
                     let passwordOptionBtn = null;
-                    for (let i = 0; i < 20; i++) {
+                    for (let i = 0; i < 30; i++) {
                         const passBtns = findVisibleClickablesByText('password', false).filter(b => !b.innerText.toLowerCase().includes('another'));
                         if (passBtns.length > 0) { passwordOptionBtn = passBtns[passBtns.length - 1]; break; }
                         await new Promise(r => setTimeout(r, 500));
