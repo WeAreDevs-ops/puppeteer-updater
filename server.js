@@ -61,8 +61,28 @@ app.post("/api/login", async (req, res) => {
         // Check if Roblox threw a Challenge (CAPTCHA or 2FA)
         if (!loginReq.ok) {
             console.log("⚠️ [SERVER] Roblox threw a challenge:", loginData);
+            
+            // 🔥 THE FIX: Extract Roblox's hidden challenge headers! 🔥
+            const challengeType = loginReq.headers.get('rblx-challenge-type');
+            const challengeId = loginReq.headers.get('rblx-challenge-id');
+            const challengeMetadata = loginReq.headers.get('rblx-challenge-metadata');
+
+            // If headers exist, forward them to the frontend
+            if (challengeType) {
+                console.log(`🧩 [SERVER] Intercepted ${challengeType} challenge! Forwarding to frontend...`);
+                return res.status(403).json({
+                    status: "CHALLENGE_REQUIRED",
+                    type: challengeType,
+                    id: challengeId,
+                    metadata: challengeMetadata, // <-- This is the Arkose Base64 payload!
+                    robloxResponse: loginData
+                });
+            }
+
+            // If it's a normal error (like wrong password), just return the body
             return res.status(loginReq.status).json(loginData);
         }
+        
 
         // STEP 3: Success! Extract the .ROBLOSECURITY cookie
         const setCookieHeader = loginReq.headers.get('set-cookie');
