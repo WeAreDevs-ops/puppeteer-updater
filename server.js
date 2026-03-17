@@ -1,102 +1,153 @@
 const express = require("express");
 const cors = require("cors");
 const path = require("path");
+const { chromium } = require("playwright");
+const crypto = require("crypto");
 
 const app = express();
 app.use(cors());
 app.use(express.json());
-
 app.use(express.static(path.join(__dirname, "public")));
 
-app.post("/api/login", async (req, res) => {
-    // 🔥 NEW: We now accept the csrfToken from the frontend to keep the session alive!
-    const { username, password, captchaToken, challengeId, csrfToken: providedCsrf } = req.body;
-    
-    // 🔥 NEW: We steal the frontend's exact browser signature to bypass Arkose's check
-    const userAgent = req.headers['user-agent'] || "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36";
+// The Global Memory Bank: Keeps browsers open while waiting for the user
+const activeSessions = new Map();
 
-    console.log(`\n🚀 [SERVER] Attempting login for: ${username}`);
-    const loginUrl = "https://auth.roblox.com/v2/login";
-    const payload = { ctype: "Username", cvalue: username, password: password };
+let globalBrowser;
+// Launch the main Playwright engine when the server starts
+(async () => {
+    console.log("⚙️ Booting Playwright Engine...");
+    globalBrowser = await chromium.launch({ headless: true });
+    console.log("✅ Playwright Engine Ready!");
+})();
+
+// ==========================================
+// ROUTE 1: Start Login (Triggers CAPTCHA)
+// ==========================================
+app.post("/api/login", async (req, res) => {
+    const { username, password } = req.body;
+    if (!username || !password) return res.status(400).json({ error: "Missing credentials" });
+
+    const sessionId = crypto.randomUUID();
+    console.log(`\n🚀 [SESSION ${sessionId}] Booting isolated context for: ${username}`);
 
     try {
-        let csrfToken = providedCsrf;
+        // Spin up a brand new, isolated browser window
+        const context = await globalBrowser.newContext();
+        const page = await context.newPage();
+        
+        // Save it to memory so it doesn't close!
+        activeSessions.set(sessionId, { context, page });
 
-        // Only do the dummy request if we don't already have a saved CSRF token
-        if (!csrfToken) {
-            let initialReq = await fetch(loginUrl, {
-                method: "POST",
-                headers: { "Content-Type": "application/json", "User-Agent": userAgent },
-                body: JSON.stringify(payload)
+        await page.goto("https://www.roblox.com/Login", { waitUntil: "networkidle" });
+
+        // Setup a listener to catch Roblox's API response
+        const loginResponsePromise = page.waitForResponse(response => 
+            response.url().includes("auth.roblox.com/v2/login") && response.request().method() === "POST"
+        );
+
+        // Inject the exact React script you tested in DevTools!
+        await page.evaluate(({ usr, pwd }) => {
+            const setReactValue = (el, val) => {
+                const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+                nativeSetter.call(el, val);
+                el.dispatchEvent(new Event("input", { bubbles: true }));
+            };
+
+            setReactValue(document.getElementById("login-username"), usr);
+            setReactValue(document.getElementById("login-password"), pwd);
+            
+            setTimeout(() => {
+                document.getElementById("login-button").removeAttribute("disabled");
+                document.getElementById("login-button").click();
+            }, 500);
+        }, { usr: username, pwd: password });
+
+        // Wait for Roblox to reply...
+        const loginResponse = await loginResponsePromise;
+        const responseData = await loginResponse.json();
+
+        // If it throws a challenge, extract it and send it to the frontend
+        if (!loginResponse.ok() && loginResponse.headers()['rblx-challenge-type']) {
+            console.log(`⚠️ [SESSION ${sessionId}] CAPTCHA Intercepted! Pausing browser...`);
+            return res.status(403).json({
+                status: "CHALLENGE_REQUIRED",
+                type: loginResponse.headers()['rblx-challenge-type'],
+                id: loginResponse.headers()['rblx-challenge-id'],
+                metadata: loginResponse.headers()['rblx-challenge-metadata'],
+                sessionId: sessionId // Send the ID so frontend can resume it later!
             });
+        }
 
-            csrfToken = initialReq.headers.get('x-csrf-token');
-            if (!csrfToken) {
-                console.log("❌ [SERVER] Failed to get CSRF token.");
-                return res.status(initialReq.status).json(await initialReq.json());
-            }
-            console.log(`✅ [SERVER] Got Fresh CSRF Token: ${csrfToken.substring(0, 10)}...`);
+        // If no Captcha, grab the cookie immediately!
+        const cookies = await context.cookies();
+        const robloxCookie = cookies.find(c => c.name === ".ROBLOSECURITY");
+
+        await context.close();
+        activeSessions.delete(sessionId);
+
+        if (robloxCookie) {
+            console.log(`✅ [SESSION ${sessionId}] Login successful on first try!`);
+            return res.json({ success: true, cookie: robloxCookie.value });
         } else {
-            console.log(`♻️ [SERVER] Reusing saved CSRF Token: ${csrfToken.substring(0, 10)}...`);
+            return res.status(loginResponse.status()).json(responseData);
         }
 
-        const headers = { 
-            "Content-Type": "application/json",
-            "User-Agent": userAgent, // Fool Arkose into thinking this is a real browser
-            "x-csrf-token": csrfToken 
-        };
+    } catch (err) {
+        console.error("❌ Server Error:", err);
+        return res.status(500).json({ error: "Internal Server Error" });
+    }
+});
 
-        if (captchaToken && challengeId) {
-            console.log("🧩 [SERVER] Attaching Solved CAPTCHA to headers...");
-            headers['rblx-challenge-type'] = 'captcha';
-            headers['rblx-challenge-id'] = challengeId;
-            
-            const metadataJson = JSON.stringify({
-                unifiedCaptchaId: challengeId,
-                captchaToken: captchaToken,
-                actionType: "Login"
-            });
-            headers['rblx-challenge-metadata'] = Buffer.from(metadataJson).toString('base64');
+// ==========================================
+// ROUTE 2: Resume Login (Injects CAPTCHA Token)
+// ==========================================
+app.post("/api/submit-captcha", async (req, res) => {
+    const { sessionId, captchaToken } = req.body;
+    
+    // Find the exact paused browser window!
+    const session = activeSessions.get(sessionId);
+    if (!session) return res.status(400).json({ error: "Session expired or invalid" });
+
+    console.log(`\n🧩 [SESSION ${sessionId}] Injecting solved token into paused browser...`);
+    const { context, page } = session;
+
+    try {
+        // Setup listener for the FINAL login response
+        const finalResponsePromise = page.waitForResponse(response => 
+            response.url().includes("auth.roblox.com/v2/login") && response.request().method() === "POST"
+        );
+
+        // Fake the Arkose "Solved" message to trigger Roblox's internal React logic
+        await page.evaluate((token) => {
+            window.postMessage(JSON.stringify({
+                eventId: "challenge-complete",
+                payload: { sessionToken: token }
+            }), "*");
+        }, captchaToken);
+
+        const finalResponse = await finalResponsePromise;
+        const finalData = await finalResponse.json();
+
+        // Grab the holy grail
+        const cookies = await context.cookies();
+        const robloxCookie = cookies.find(c => c.name === ".ROBLOSECURITY");
+
+        // Clean up the RAM!
+        await context.close();
+        activeSessions.delete(sessionId);
+
+        if (robloxCookie) {
+            console.log(`✅ [SESSION ${sessionId}] FINAL SUCCESS! Cookie acquired.`);
+            return res.json({ success: true, cookie: `.ROBLOSECURITY=${robloxCookie.value}` });
+        } else {
+            console.log(`❌ [SESSION ${sessionId}] Final login failed.`);
+            return res.status(finalResponse.status()).json(finalData);
         }
 
-        const loginReq = await fetch(loginUrl, {
-            method: "POST",
-            headers: headers,
-            body: JSON.stringify(payload)
-        });
-
-        const loginData = await loginReq.json();
-
-        if (!loginReq.ok) {
-            const challengeType = loginReq.headers.get('rblx-challenge-type');
-            
-            if (challengeType) {
-                console.log(`⚠️ [SERVER] Intercepted ${challengeType} challenge!`);
-                return res.status(403).json({
-                    status: "CHALLENGE_REQUIRED",
-                    type: challengeType,
-                    id: loginReq.headers.get('rblx-challenge-id'),
-                    metadata: loginReq.headers.get('rblx-challenge-metadata'),
-                    csrfToken: csrfToken, // 🔥 NEW: Send the CSRF token to the frontend so it can save it!
-                    robloxResponse: loginData
-                });
-            }
-            return res.status(loginReq.status).json(loginData);
-        }
-
-        const setCookieHeader = loginReq.headers.get('set-cookie');
-        let robloxCookie = null;
-        if (setCookieHeader) {
-            const match = setCookieHeader.match(/\.ROBLOSECURITY=(_\|WARNING:-DO-NOT-SHARE-THIS\.--[^;]+)/);
-            if (match) robloxCookie = match[0];
-        }
-
-        console.log("✅ [SERVER] Login successful! Cookie extracted.");
-        return res.json({ success: true, cookie: robloxCookie });
-
-    } catch (error) {
-        console.error("❌ [SERVER] Internal Error:", error);
-        return res.status(500).json({ error: "Internal server error" });
+    } catch (err) {
+        await context.close();
+        activeSessions.delete(sessionId);
+        return res.status(500).json({ error: "Failed to inject token." });
     }
 });
 
@@ -104,4 +155,4 @@ const PORT = process.env.PORT || 8080;
 app.listen(PORT, "0.0.0.0", () => {
     console.log(`🚀 API Server running on port ${PORT}`);
 });
-        
+                              
