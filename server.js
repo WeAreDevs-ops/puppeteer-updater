@@ -13,7 +13,8 @@ app.use(express.static(path.join(__dirname, "public")));
 // ROBLOX API LOGIN PROXY
 // ==========================================
 app.post("/api/login", async (req, res) => {
-    const { username, password } = req.body;
+    // We now accept the captchaToken and challengeId from the frontend!
+    const { username, password, captchaToken, challengeId } = req.body;
 
     if (!username || !password) {
         return res.status(400).json({ error: "Username and password required" });
@@ -46,13 +47,31 @@ app.post("/api/login", async (req, res) => {
 
         console.log(`✅ [SERVER] Got CSRF Token: ${csrfToken.substring(0, 10)}...`);
 
-        // STEP 2: The Real Request with the token
+        // 🔥 STEP 1.5: Build the Headers (Injecting the Solved CAPTCHA!)
+        const headers = { 
+            "Content-Type": "application/json",
+            "x-csrf-token": csrfToken 
+        };
+
+        // If the frontend sent us a solved token, we inject it into the Roblox headers here
+        if (captchaToken && challengeId) {
+            console.log("🧩 [SERVER] Attaching Solved CAPTCHA to headers...");
+            headers['rblx-challenge-type'] = 'captcha';
+            headers['rblx-challenge-id'] = challengeId;
+            
+            // Roblox expects this exact JSON object encoded in Base64
+            const metadataJson = JSON.stringify({
+                unifiedCaptchaId: challengeId,
+                captchaToken: captchaToken,
+                actionType: "Login"
+            });
+            headers['rblx-challenge-metadata'] = Buffer.from(metadataJson).toString('base64');
+        }
+
+        // STEP 2: The Real Request with the token and headers
         const loginReq = await fetch(loginUrl, {
             method: "POST",
-            headers: { 
-                "Content-Type": "application/json",
-                "x-csrf-token": csrfToken 
-            },
+            headers: headers,
             body: JSON.stringify(payload)
         });
 
@@ -62,9 +81,9 @@ app.post("/api/login", async (req, res) => {
         if (!loginReq.ok) {
             console.log("⚠️ [SERVER] Roblox threw a challenge.");
             
-            // 🔥 Extract Roblox's hidden challenge headers! 🔥
+            // Extract Roblox's hidden challenge headers
             const challengeType = loginReq.headers.get('rblx-challenge-type');
-            const challengeId = loginReq.headers.get('rblx-challenge-id');
+            const challengeIdResponse = loginReq.headers.get('rblx-challenge-id');
             const challengeMetadata = loginReq.headers.get('rblx-challenge-metadata');
 
             // If headers exist, forward them directly to the frontend
@@ -73,8 +92,8 @@ app.post("/api/login", async (req, res) => {
                 return res.status(403).json({
                     status: "CHALLENGE_REQUIRED",
                     type: challengeType,
-                    id: challengeId,
-                    metadata: challengeMetadata, // <-- The Arkose Base64 payload
+                    id: challengeIdResponse,
+                    metadata: challengeMetadata, // The Arkose Base64 payload
                     robloxResponse: loginData
                 });
             }
@@ -112,4 +131,4 @@ app.listen(PORT, "0.0.0.0", () => {
     console.log(`🚀 API Server running on port ${PORT}`);
     console.log(`📱 Frontend available at http://localhost:${PORT}`);
 });
-                
+                    
