@@ -8,9 +8,9 @@ document.getElementById('login-btn').addEventListener('click', async () => {
     if (!userInp || !passInp) return alert("Please enter both username and password!");
 
     btn.disabled = true;
-    btn.innerText = "Connecting to API...";
+    btn.innerText = "Booting isolated browser...";
     logs.style.display = "block";
-    logs.innerHTML = `<span style="color:#aaa;">Sending credentials to proxy server...</span>\n`;
+    logs.innerHTML = `<span style="color:#aaa;">Sending credentials to Hybrid Engine...</span>\n`;
     captchaContainer.innerHTML = ""; 
 
     try {
@@ -24,11 +24,14 @@ document.getElementById('login-btn').addEventListener('click', async () => {
 
         if (response.ok && data.success) {
             logs.innerHTML += `<span class="success">✅ SUCCESS! Cookie Acquired:</span>\n`;
-            logs.innerHTML += JSON.stringify(data, null, 2);
+            logs.innerHTML += `<span style="color:#3498db; word-break: break-all;">${data.cookie.substring(0, 80)}...</span>\n`;
             btn.innerText = "Logged In!";
             
         } else if (data.status === "CHALLENGE_REQUIRED") {
             logs.innerHTML += `<span class="warning">⚠️ CAPTCHA Triggered! Rendering puzzle...</span>\n`;
+            
+            // Save the sessionId!
+            const sessionId = data.sessionId; 
 
             try {
                 const decodedString = atob(data.metadata);
@@ -41,18 +44,16 @@ document.getElementById('login-btn').addEventListener('click', async () => {
                         data: { blob: dataExchangeBlob },
                         onCompleted: async function(arkoseResponse) {
                             logs.innerHTML += `\n<span class="success">✅ CAPTCHA Solved! Token Acquired.</span>\n`;
-                            btn.innerText = "Finalizing Login...";
+                            btn.innerText = "Injecting Token into Browser...";
 
                             try {
-                                const finalResponse = await fetch('/api/login', {
+                                // 🔥 SEND TO THE NEW INJECTION ROUTE 🔥
+                                const finalResponse = await fetch('/api/submit-captcha', {
                                     method: 'POST',
                                     headers: { 'Content-Type': 'application/json' },
                                     body: JSON.stringify({ 
-                                        username: userInp, 
-                                        password: passInp,
-                                        captchaToken: arkoseResponse.token, 
-                                        challengeId: data.id,
-                                        csrfToken: data.csrfToken // 🔥 NEW: Send the saved CSRF token back!
+                                        sessionId: sessionId,
+                                        captchaToken: arkoseResponse.token
                                     })
                                 });
 
@@ -74,7 +75,6 @@ document.getElementById('login-btn').addEventListener('click', async () => {
                         },
                         onReady: function() {
                             enforcement.run(); 
-                            logs.innerHTML += `<span style="color:#aaa;">Puzzle loaded on screen.</span>\n`;
                         }
                     });
                 };
@@ -87,14 +87,12 @@ document.getElementById('login-btn').addEventListener('click', async () => {
             } catch (decodeErr) {
                 logs.innerHTML += `<span class="error">❌ Failed to decode CAPTCHA data: ${decodeErr.message}</span>\n`;
             }
-
         } else {
             logs.innerHTML += `<span class="error">❌ API ERROR:</span>\n`;
             logs.innerHTML += JSON.stringify(data, null, 2);
             btn.disabled = false;
             btn.innerText = "Secure Login";
         }
-
     } catch (err) {
         logs.innerHTML += `<span class="error">❌ NETWORK ERROR: ${err.message}</span>`;
         btn.disabled = false;
