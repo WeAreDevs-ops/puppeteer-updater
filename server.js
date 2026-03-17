@@ -16,7 +16,14 @@ let globalBrowser;
 // Launch the main Playwright engine when the server starts
 (async () => {
     console.log("⚙️ Booting Playwright Engine...");
-    globalBrowser = await chromium.launch({ headless: true });
+    globalBrowser = await chromium.launch({ 
+        headless: true,
+        args: [
+            '--no-sandbox', 
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage'
+        ]
+    });
     console.log("✅ Playwright Engine Ready!");
 })();
 
