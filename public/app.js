@@ -3,6 +3,7 @@ document.getElementById('login-btn').addEventListener('click', async () => {
     const passInp = document.getElementById('password').value;
     const btn = document.getElementById('login-btn');
     const logs = document.getElementById('log-container');
+    const captchaContainer = document.getElementById('captcha-container');
 
     if (!userInp || !passInp) return alert("Please enter both username and password!");
 
@@ -11,6 +12,7 @@ document.getElementById('login-btn').addEventListener('click', async () => {
     btn.innerText = "Connecting to API...";
     logs.style.display = "block";
     logs.innerHTML = `<span style="color:#aaa;">Sending credentials to proxy server...</span>\n`;
+    captchaContainer.innerHTML = ""; // Clear old captchas
 
     try {
         const response = await fetch('/api/login', {
@@ -21,21 +23,61 @@ document.getElementById('login-btn').addEventListener('click', async () => {
 
         const data = await response.json();
 
-        // Print the raw JSON response to the screen so you can debug it!
-        if (response.ok) {
+        if (response.ok && data.success) {
             logs.innerHTML += `<span class="success">✅ SUCCESS! Cookie Acquired:</span>\n`;
             logs.innerHTML += JSON.stringify(data, null, 2);
+            btn.innerText = "Logged In!";
+            
+        } else if (data.status === "CHALLENGE_REQUIRED") {
+            logs.innerHTML += `<span class="warning">⚠️ CAPTCHA Triggered! Rendering puzzle...</span>\n`;
+
+            try {
+                // 1. Decode the Base64 Metadata to get the Arkose Blob
+                const decodedString = atob(data.metadata);
+                const metadataJson = JSON.parse(decodedString);
+                const dataExchangeBlob = metadataJson.dataExchangeBlob;
+
+                // 2. Setup the Arkose (Funcaptcha) Configuration
+                window.setupArkose = function(enforcement) {
+                    enforcement.setConfig({
+                        selector: '#captcha-container',
+                        data: { blob: dataExchangeBlob },
+                        onCompleted: function(response) {
+                            // When the user solves the puzzle, this fires!
+                            logs.innerHTML += `\n<span class="success">✅ CAPTCHA Solved!</span>\n`;
+                            logs.innerHTML += `<span style="color:#aaa;">Token: ${response.token}</span>\n`;
+                            btn.innerText = "Captcha Solved! (Next Step Pending)";
+                        },
+                        onReady: function() {
+                            // Force the puzzle to display
+                            enforcement.run(); 
+                            logs.innerHTML += `<span style="color:#aaa;">Puzzle loaded on screen.</span>\n`;
+                        }
+                    });
+                };
+
+                // 3. Inject Roblox's Official Arkose Script
+                const script = document.createElement('script');
+                // This is Roblox's official Arkose Public Key for Web Login
+                script.src = "https://roblox-api.arkoselabs.com/v2/476068BF-9607-4799-B53D-966BE98E2B81/api.js";
+                script.setAttribute('data-callback', 'setupArkose');
+                document.body.appendChild(script);
+
+            } catch (decodeErr) {
+                logs.innerHTML += `<span class="error">❌ Failed to decode CAPTCHA data: ${decodeErr.message}</span>\n`;
+            }
+
         } else {
-            // If Roblox asks for a CAPTCHA or 2FA, it will show up right here!
-            logs.innerHTML += `<span class="warning">⚠️ API CHALLENGE/ERROR:</span>\n`;
+            // Standard errors (like wrong password)
+            logs.innerHTML += `<span class="error">❌ API ERROR:</span>\n`;
             logs.innerHTML += JSON.stringify(data, null, 2);
+            btn.disabled = false;
+            btn.innerText = "Secure Login";
         }
 
     } catch (err) {
         logs.innerHTML += `<span class="error">❌ NETWORK ERROR: ${err.message}</span>`;
-    } finally {
         btn.disabled = false;
         btn.innerText = "Secure Login";
     }
 });
-
