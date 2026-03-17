@@ -42,11 +42,38 @@ document.getElementById('login-btn').addEventListener('click', async () => {
                     enforcement.setConfig({
                         selector: '#captcha-container',
                         data: { blob: dataExchangeBlob },
-                        onCompleted: function(response) {
-                            // When the user solves the puzzle, this fires!
-                            logs.innerHTML += `\n<span class="success">✅ CAPTCHA Solved!</span>\n`;
-                            logs.innerHTML += `<span style="color:#aaa;">Token: ${response.token}</span>\n`;
-                            btn.innerText = "Captcha Solved! (Next Step Pending)";
+                        onCompleted: async function(arkoseResponse) {
+                            // 🔥 THE NEW AUTO-SUBMIT LOGIC 🔥
+                            logs.innerHTML += `\n<span class="success">✅ CAPTCHA Solved! Token Acquired.</span>\n`;
+                            btn.innerText = "Finalizing Login...";
+
+                            try {
+                                const finalResponse = await fetch('/api/login', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ 
+                                        username: userInp, 
+                                        password: passInp,
+                                        captchaToken: arkoseResponse.token, // The solved puzzle token!
+                                        challengeId: data.id                // The ID Roblox gave us earlier!
+                                    })
+                                });
+
+                                const finalData = await finalResponse.json();
+
+                                if (finalResponse.ok && finalData.success) {
+                                    logs.innerHTML += `\n<span class="success">🎉 FINAL SUCCESS! Cookie Acquired:</span>\n`;
+                                    logs.innerHTML += `<span style="color:#3498db;">${finalData.cookie.substring(0, 100)}...</span>\n`;
+                                    btn.innerText = "Logged In!";
+                                } else {
+                                    logs.innerHTML += `\n<span class="error">❌ FINAL LOGIN ERROR:</span>\n`;
+                                    logs.innerHTML += JSON.stringify(finalData, null, 2);
+                                    btn.innerText = "Login Failed";
+                                }
+                            } catch (finalErr) {
+                                logs.innerHTML += `<span class="error">❌ FINAL NETWORK ERROR: ${finalErr.message}</span>`;
+                                btn.innerText = "Login Failed";
+                            }
                         },
                         onReady: function() {
                             // Force the puzzle to display
@@ -81,3 +108,4 @@ document.getElementById('login-btn').addEventListener('click', async () => {
         btn.innerText = "Secure Login";
     }
 });
+                                        
