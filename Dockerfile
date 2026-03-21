@@ -1,5 +1,5 @@
-# 1. Use Microsoft's official Playwright image (has ALL the Linux drivers pre-installed!)
-FROM mcr.microsoft.com/playwright:v1.42.0-jammy
+# 1. Use the exact Playwright image version that matches your NPM package
+FROM mcr.microsoft.com/playwright:v1.58.2-jammy
 
 # 2. Set the working directory inside the container
 WORKDIR /app
