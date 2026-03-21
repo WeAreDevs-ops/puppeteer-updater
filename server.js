@@ -42,8 +42,8 @@ app.post("/api/login", async (req, res) => {
         const loginResponsePromise = page.waitForResponse(response => 
             response.url().includes("auth.roblox.com/v2/login") && response.request().method() === "POST"
         );
+        loginResponsePromise.catch(() => {}); // Catch floating errors
 
-        // 🔥 FIX: Use native Playwright keystrokes instead of DOM hacking
         console.log(`⌨️ [SESSION ${sessionId}] Typing credentials natively...`);
         await page.locator('#login-username').fill(username);
         await page.locator('#login-password').fill(password);
@@ -95,44 +95,47 @@ app.post("/api/submit-captcha", async (req, res) => {
     const { context, page, username, password } = session;
 
     try {
-        // Intercept the outgoing request
-        await page.route("**/v2/login", async (route) => {
-            const headers = route.request().headers();
-            const metadataJson = JSON.stringify({
-                unifiedCaptchaId: challengeId,
-                captchaToken: captchaToken,
-                actionType: "Login"
-            });
-            
-            headers['rblx-challenge-type'] = 'captcha';
-            headers['rblx-challenge-id'] = challengeId;
-            headers['rblx-challenge-metadata'] = Buffer.from(metadataJson).toString('base64');
+        // 🔥 CRITICAL FIX 1: Refresh the page to wipe the invisible CAPTCHA modal off the DOM
+        console.log(`🔄 [SESSION ${sessionId}] Refreshing page for a clean DOM...`);
+        await page.goto("https://www.roblox.com/Login", { waitUntil: "networkidle" });
 
-            console.log(`🚀 [SESSION ${sessionId}] Headers injected! Forwarding to Roblox...`);
-            await route.continue({ headers });
+        // 🔥 CRITICAL FIX 2: Wrap interceptor in a try/catch so Node never crashes!
+        await page.route("**/v2/login", async (route) => {
+            try {
+                if (route.request().method() !== 'POST') return route.continue();
+
+                const headers = route.request().headers();
+                const metadataJson = JSON.stringify({
+                    unifiedCaptchaId: challengeId,
+                    captchaToken: captchaToken,
+                    actionType: "Login"
+                });
+                
+                headers['rblx-challenge-type'] = 'captcha';
+                headers['rblx-challenge-id'] = challengeId;
+                headers['rblx-challenge-metadata'] = Buffer.from(metadataJson).toString('base64');
+
+                console.log(`🚀 [SESSION ${sessionId}] Headers injected! Forwarding to Roblox...`);
+                await route.continue({ headers });
+            } catch (routeErr) {
+                console.log(`⚠️ [SESSION ${sessionId}] Silent interceptor error (ignored):`, routeErr.message);
+            }
         });
 
         const finalResponsePromise = page.waitForResponse(response => 
             response.url().includes("auth.roblox.com/v2/login") && response.request().method() === "POST"
         );
+        finalResponsePromise.catch(() => {}); // Safety net
 
-        // 🔥 FIX: Re-type the username and password with NATIVE keystrokes
+        // 🔥 CRITICAL FIX 3: Force inputs to bypass any remaining React focus checks
         console.log(`⌨️ [SESSION ${sessionId}] Re-typing credentials natively...`);
-        
-        // Clear the boxes first just in case
-        await page.locator('#login-username').clear();
-        await page.locator('#login-password').clear();
-
-        // Type like a real human
-        await page.locator('#login-username').fill(username);
-        await page.locator('#login-password').fill(password);
-        
-        // Force the click through any invisible overlays
+        await page.locator('#login-username').fill(username, { force: true });
+        await page.locator('#login-password').fill(password, { force: true });
         await page.locator('#login-button').click({ force: true });
 
         const finalResponse = await Promise.race([
             finalResponsePromise,
-            new Promise((_, reject) => setTimeout(() => reject(new Error("Roblox API Timeout - React refused to send request")), 15000))
+            new Promise((_, reject) => setTimeout(() => reject(new Error("Roblox API Timeout")), 15000))
         ]);
 
         const finalData = await finalResponse.json();
@@ -162,4 +165,4 @@ const PORT = process.env.PORT || 8080;
 app.listen(PORT, "0.0.0.0", () => {
     console.log(`🚀 API Server running on port ${PORT}`);
 });
-                    
+            
