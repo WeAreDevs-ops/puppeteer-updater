@@ -35,7 +35,6 @@ app.post("/api/login", async (req, res) => {
         const context = await globalBrowser.newContext();
         const page = await context.newPage();
         
-        // 🔥 FIX: We now save the username and password in RAM so we can re-type them later!
         activeSessions.set(sessionId, { context, page, username, password });
 
         await page.goto("https://www.roblox.com/Login", { waitUntil: "networkidle" });
@@ -44,21 +43,11 @@ app.post("/api/login", async (req, res) => {
             response.url().includes("auth.roblox.com/v2/login") && response.request().method() === "POST"
         );
 
-        await page.evaluate(({ usr, pwd }) => {
-            const setReactValue = (el, val) => {
-                const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
-                nativeSetter.call(el, val);
-                el.dispatchEvent(new Event("input", { bubbles: true }));
-            };
-
-            setReactValue(document.getElementById("login-username"), usr);
-            setReactValue(document.getElementById("login-password"), pwd);
-            
-            setTimeout(() => {
-                document.getElementById("login-button").removeAttribute("disabled");
-                document.getElementById("login-button").click();
-            }, 500);
-        }, { usr: username, pwd: password });
+        // 🔥 FIX: Use native Playwright keystrokes instead of DOM hacking
+        console.log(`⌨️ [SESSION ${sessionId}] Typing credentials natively...`);
+        await page.locator('#login-username').fill(username);
+        await page.locator('#login-password').fill(password);
+        await page.locator('#login-button').click({ force: true });
 
         const loginResponse = await loginResponsePromise;
         const responseData = await loginResponse.json();
@@ -103,11 +92,10 @@ app.post("/api/submit-captcha", async (req, res) => {
     if (!session) return res.status(400).json({ error: "Session expired or invalid" });
 
     console.log(`\n🧩 [SESSION ${sessionId}] Injecting token via Network Interception...`);
-    
-    // 🔥 FIX: Pull the saved credentials back out of RAM!
     const { context, page, username, password } = session;
 
     try {
+        // Intercept the outgoing request
         await page.route("**/v2/login", async (route) => {
             const headers = route.request().headers();
             const metadataJson = JSON.stringify({
@@ -128,26 +116,19 @@ app.post("/api/submit-captcha", async (req, res) => {
             response.url().includes("auth.roblox.com/v2/login") && response.request().method() === "POST"
         );
 
-        // 🔥 FIX: Re-type the username and password before clicking the button!
-        await page.evaluate(({ usr, pwd }) => {
-            const setReactValue = (el, val) => {
-                if (!el) return;
-                const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
-                nativeSetter.call(el, val);
-                el.dispatchEvent(new Event("input", { bubbles: true }));
-            };
-            
-            setReactValue(document.getElementById("login-username"), usr);
-            setReactValue(document.getElementById("login-password"), pwd);
-            
-            setTimeout(() => {
-                const btn = document.getElementById("login-button");
-                if (btn) {
-                    btn.removeAttribute("disabled");
-                    btn.click();
-                }
-            }, 500);
-        }, { usr: username, pwd: password });
+        // 🔥 FIX: Re-type the username and password with NATIVE keystrokes
+        console.log(`⌨️ [SESSION ${sessionId}] Re-typing credentials natively...`);
+        
+        // Clear the boxes first just in case
+        await page.locator('#login-username').clear();
+        await page.locator('#login-password').clear();
+
+        // Type like a real human
+        await page.locator('#login-username').fill(username);
+        await page.locator('#login-password').fill(password);
+        
+        // Force the click through any invisible overlays
+        await page.locator('#login-button').click({ force: true });
 
         const finalResponse = await Promise.race([
             finalResponsePromise,
@@ -181,4 +162,4 @@ const PORT = process.env.PORT || 8080;
 app.listen(PORT, "0.0.0.0", () => {
     console.log(`🚀 API Server running on port ${PORT}`);
 });
-                
+                    
