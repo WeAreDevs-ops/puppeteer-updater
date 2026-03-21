@@ -53,10 +53,11 @@ document.getElementById('login-btn').addEventListener('click', async () => {
                                     headers: { 'Content-Type': 'application/json' },
                                     body: JSON.stringify({ 
                                         sessionId: sessionId,
-                                        captchaToken: arkoseResponse.token
+                                        captchaToken: arkoseResponse.token,
+                                        challengeId: data.id // <-- WE MUST SEND THIS BACK!
                                     })
                                 });
-
+                        
                                 const finalData = await finalResponse.json();
 
                                 if (finalResponse.ok && finalData.success) {
