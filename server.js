@@ -9,20 +9,14 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 
-// The Global Memory Bank: Keeps browsers open while waiting for the user
 const activeSessions = new Map();
 
 let globalBrowser;
-// Launch the main Playwright engine when the server starts
 (async () => {
     console.log("⚙️ Booting Playwright Engine...");
     globalBrowser = await chromium.launch({ 
         headless: true,
-        args: [
-            '--no-sandbox', 
-            '--disable-setuid-sandbox',
-            '--disable-dev-shm-usage'
-        ]
+        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
     });
     console.log("✅ Playwright Engine Ready!");
 })();
@@ -38,21 +32,18 @@ app.post("/api/login", async (req, res) => {
     console.log(`\n🚀 [SESSION ${sessionId}] Booting isolated context for: ${username}`);
 
     try {
-        // Spin up a brand new, isolated browser window
         const context = await globalBrowser.newContext();
         const page = await context.newPage();
         
-        // Save it to memory so it doesn't close!
-        activeSessions.set(sessionId, { context, page });
+        // 🔥 FIX: We now save the username and password in RAM so we can re-type them later!
+        activeSessions.set(sessionId, { context, page, username, password });
 
         await page.goto("https://www.roblox.com/Login", { waitUntil: "networkidle" });
 
-        // Setup a listener to catch Roblox's API response
         const loginResponsePromise = page.waitForResponse(response => 
             response.url().includes("auth.roblox.com/v2/login") && response.request().method() === "POST"
         );
 
-        // Inject the exact React script you tested in DevTools!
         await page.evaluate(({ usr, pwd }) => {
             const setReactValue = (el, val) => {
                 const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
@@ -69,11 +60,9 @@ app.post("/api/login", async (req, res) => {
             }, 500);
         }, { usr: username, pwd: password });
 
-        // Wait for Roblox to reply...
         const loginResponse = await loginResponsePromise;
         const responseData = await loginResponse.json();
 
-        // If it throws a challenge, extract it and send it to the frontend
         if (!loginResponse.ok() && loginResponse.headers()['rblx-challenge-type']) {
             console.log(`⚠️ [SESSION ${sessionId}] CAPTCHA Intercepted! Pausing browser...`);
             return res.status(403).json({
@@ -81,11 +70,10 @@ app.post("/api/login", async (req, res) => {
                 type: loginResponse.headers()['rblx-challenge-type'],
                 id: loginResponse.headers()['rblx-challenge-id'],
                 metadata: loginResponse.headers()['rblx-challenge-metadata'],
-                sessionId: sessionId // Send the ID so frontend can resume it later!
+                sessionId: sessionId 
             });
         }
 
-        // If no Captcha, grab the cookie immediately!
         const cookies = await context.cookies();
         const robloxCookie = cookies.find(c => c.name === ".ROBLOSECURITY");
 
@@ -106,23 +94,22 @@ app.post("/api/login", async (req, res) => {
 });
 
 // ==========================================
-// ROUTE 2: Resume Login (Injects CAPTCHA Token)
+// ROUTE 2: Resume Login (Network Interception)
 // ==========================================
 app.post("/api/submit-captcha", async (req, res) => {
-    // We now catch the challengeId from the frontend!
     const { sessionId, captchaToken, challengeId } = req.body;
     
     const session = activeSessions.get(sessionId);
     if (!session) return res.status(400).json({ error: "Session expired or invalid" });
 
     console.log(`\n🧩 [SESSION ${sessionId}] Injecting token via Network Interception...`);
-    const { context, page } = session;
+    
+    // 🔥 FIX: Pull the saved credentials back out of RAM!
+    const { context, page, username, password } = session;
 
     try {
-        // 1. Intercept the NEXT login request and inject our CAPTCHA headers!
         await page.route("**/v2/login", async (route) => {
             const headers = route.request().headers();
-            
             const metadataJson = JSON.stringify({
                 unifiedCaptchaId: challengeId,
                 captchaToken: captchaToken,
@@ -137,33 +124,40 @@ app.post("/api/submit-captcha", async (req, res) => {
             await route.continue({ headers });
         });
 
-        // 2. Setup listener for the response
         const finalResponsePromise = page.waitForResponse(response => 
             response.url().includes("auth.roblox.com/v2/login") && response.request().method() === "POST"
         );
 
-        // 3. Force click the login button again to trigger a FRESH SAI Signature!
-        await page.evaluate(() => {
-            const btn = document.getElementById("login-button");
-            if (btn) {
-                btn.removeAttribute("disabled");
-                btn.click();
-            }
-        });
+        // 🔥 FIX: Re-type the username and password before clicking the button!
+        await page.evaluate(({ usr, pwd }) => {
+            const setReactValue = (el, val) => {
+                if (!el) return;
+                const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+                nativeSetter.call(el, val);
+                el.dispatchEvent(new Event("input", { bubbles: true }));
+            };
+            
+            setReactValue(document.getElementById("login-username"), usr);
+            setReactValue(document.getElementById("login-password"), pwd);
+            
+            setTimeout(() => {
+                const btn = document.getElementById("login-button");
+                if (btn) {
+                    btn.removeAttribute("disabled");
+                    btn.click();
+                }
+            }, 500);
+        }, { usr: username, pwd: password });
 
-        // 4. Wait for Roblox to process it (with a 15-second timeout to prevent silent hangs)
         const finalResponse = await Promise.race([
             finalResponsePromise,
-            new Promise((_, reject) => setTimeout(() => reject(new Error("Roblox API Timeout")), 15000))
+            new Promise((_, reject) => setTimeout(() => reject(new Error("Roblox API Timeout - React refused to send request")), 15000))
         ]);
 
         const finalData = await finalResponse.json();
-
-        // 5. Grab the holy grail
         const cookies = await context.cookies();
         const robloxCookie = cookies.find(c => c.name === ".ROBLOSECURITY");
 
-        // Clean up the RAM
         await context.close();
         activeSessions.delete(sessionId);
 
@@ -187,4 +181,4 @@ const PORT = process.env.PORT || 8080;
 app.listen(PORT, "0.0.0.0", () => {
     console.log(`🚀 API Server running on port ${PORT}`);
 });
-                              
+                
