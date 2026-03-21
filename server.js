@@ -109,37 +109,61 @@ app.post("/api/login", async (req, res) => {
 // ROUTE 2: Resume Login (Injects CAPTCHA Token)
 // ==========================================
 app.post("/api/submit-captcha", async (req, res) => {
-    const { sessionId, captchaToken } = req.body;
+    // We now catch the challengeId from the frontend!
+    const { sessionId, captchaToken, challengeId } = req.body;
     
-    // Find the exact paused browser window!
     const session = activeSessions.get(sessionId);
     if (!session) return res.status(400).json({ error: "Session expired or invalid" });
 
-    console.log(`\n🧩 [SESSION ${sessionId}] Injecting solved token into paused browser...`);
+    console.log(`\n🧩 [SESSION ${sessionId}] Injecting token via Network Interception...`);
     const { context, page } = session;
 
     try {
-        // Setup listener for the FINAL login response
+        // 1. Intercept the NEXT login request and inject our CAPTCHA headers!
+        await page.route("**/v2/login", async (route) => {
+            const headers = route.request().headers();
+            
+            const metadataJson = JSON.stringify({
+                unifiedCaptchaId: challengeId,
+                captchaToken: captchaToken,
+                actionType: "Login"
+            });
+            
+            headers['rblx-challenge-type'] = 'captcha';
+            headers['rblx-challenge-id'] = challengeId;
+            headers['rblx-challenge-metadata'] = Buffer.from(metadataJson).toString('base64');
+
+            console.log(`🚀 [SESSION ${sessionId}] Headers injected! Forwarding to Roblox...`);
+            await route.continue({ headers });
+        });
+
+        // 2. Setup listener for the response
         const finalResponsePromise = page.waitForResponse(response => 
             response.url().includes("auth.roblox.com/v2/login") && response.request().method() === "POST"
         );
 
-        // Fake the Arkose "Solved" message to trigger Roblox's internal React logic
-        await page.evaluate((token) => {
-            window.postMessage(JSON.stringify({
-                eventId: "challenge-complete",
-                payload: { sessionToken: token }
-            }), "*");
-        }, captchaToken);
+        // 3. Force click the login button again to trigger a FRESH SAI Signature!
+        await page.evaluate(() => {
+            const btn = document.getElementById("login-button");
+            if (btn) {
+                btn.removeAttribute("disabled");
+                btn.click();
+            }
+        });
 
-        const finalResponse = await finalResponsePromise;
+        // 4. Wait for Roblox to process it (with a 15-second timeout to prevent silent hangs)
+        const finalResponse = await Promise.race([
+            finalResponsePromise,
+            new Promise((_, reject) => setTimeout(() => reject(new Error("Roblox API Timeout")), 15000))
+        ]);
+
         const finalData = await finalResponse.json();
 
-        // Grab the holy grail
+        // 5. Grab the holy grail
         const cookies = await context.cookies();
         const robloxCookie = cookies.find(c => c.name === ".ROBLOSECURITY");
 
-        // Clean up the RAM!
+        // Clean up the RAM
         await context.close();
         activeSessions.delete(sessionId);
 
@@ -147,14 +171,15 @@ app.post("/api/submit-captcha", async (req, res) => {
             console.log(`✅ [SESSION ${sessionId}] FINAL SUCCESS! Cookie acquired.`);
             return res.json({ success: true, cookie: `.ROBLOSECURITY=${robloxCookie.value}` });
         } else {
-            console.log(`❌ [SESSION ${sessionId}] Final login failed.`);
+            console.log(`❌ [SESSION ${sessionId}] Final login failed. Roblox replied:`, finalData);
             return res.status(finalResponse.status()).json(finalData);
         }
 
     } catch (err) {
+        console.error(`❌ [SESSION ${sessionId}] Injection Error:`, err.message);
         await context.close();
         activeSessions.delete(sessionId);
-        return res.status(500).json({ error: "Failed to inject token." });
+        return res.status(500).json({ error: "Failed to inject token: " + err.message });
     }
 });
 
